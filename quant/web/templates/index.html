@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quant Trading Framework</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>Quant Trading Framework</h1>
+        <p>Binance + CCXT / Backtest / Paper / Live</p>
+      </header>
+
+      <section class="card">
+        <h2>Start Engine</h2>
+        <form id="start-form">
+          <label>
+            Symbol
+            <input name="symbol" value="BTC/USDT" />
+          </label>
+          <label>
+            Timeframe
+            <input name="timeframe" value="1m" />
+          </label>
+          <label>
+            Market Type
+            <select name="market_type">
+              <option value="spot">Spot</option>
+              <option value="futures">Futures</option>
+            </select>
+          </label>
+          <label>
+            Run Mode
+            <select name="run_mode">
+              <option value="backtest">Backtest</option>
+              <option value="paper">Paper</option>
+              <option value="live">Live</option>
+            </select>
+          </label>
+          <label>
+            Cash
+            <input name="cash" type="number" value="10000" />
+          </label>
+          <button type="submit">Start</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Status</h2>
+        <pre id="status">No engine running.</pre>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
