@@ -1,0 +1,93 @@
+[package]
+name = "poly_hft"
+version = "0.1.0"
+edition = "2021"
+authors = ["HFT Team"]
+description = "Production-grade Polymarket 5-minute BTC prediction trading system"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Web framework
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rkyv = { version = "0.7", features = ["validation"] }
+
+# WebSocket
+tokio-tungstenite = "0.21"
+warp = "0.3"
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+
+# Cryptography for EIP-712
+k256 = { version = "0.13", features = ["ecdsa", "sha256"] }
+ethers-core = "2.0"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+time = "0.3"
+
+# Logging and tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"
+
+# Metrics
+metrics = "0.22"
+metrics-exporter-prometheus = "0.13"
+
+# Lock-free data structures
+crossbeam = "0.8"
+crossbeam-channel = "0.5"
+parking_lot = "0.12"
+
+# Memory optimization
+bumpalo = "3.14"
+
+# JSON parsing with SIMD
+simd-json = "0.13"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Configuration
+config = "0.14"
+
+# UUID for order IDs
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Order book data structures
+rust_decimal = "1.33"
+indexmap = "2.1"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tokio-test = "0.4"
+mockall = "0.12"
+
+[[bin]]
+name = "poly_hft_engine"
+path = "src/main.rs"
+
+[[bin]]
+name = "backtest_runner"
+path = "src/bin/backtest.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.bench]
+opt-level = 3
+lto = true
