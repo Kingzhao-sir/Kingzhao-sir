@@ -1,0 +1,66 @@
+[package]
+name = "polymarket-hft"
+version = "0.1.0"
+edition = "2021"
+authors = ["HFT Team"]
+description = "Production-grade HFT system for Polymarket 5m BTC prediction"
+
+[dependencies]
+# Async Runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Serialization (Zero-copy with rkyv)
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rkyv = { version = "0.7", features = ["validation"] }
+
+# Networking
+reqwest = { version = "0.11", features = ["json", "stream"] }
+tokio-tungstenite = "0.20"
+hyper = { version = "0.14", features = ["full"] }
+
+# Crypto (EIP-712 Signing)
+k256 = { version = "0.13", features = ["ecdsa", "sha256"] }
+ethers-core = "2.0"
+hex = "0.4"
+
+# Data Structures & Concurrency
+crossbeam = "0.8"
+dashmap = "5.5"
+ringbuffer = "0.15"
+parking_lot = "0.12"
+
+# Math & Stats
+ndarray = "0.15"
+statrs = "0.16"
+
+# Logging & Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error Handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+[dev-dependencies]
+criterion = "0.5"
+mockall = "0.12"
+rand = "0.8"
+
+[[bin]]
+name = "trading-engine"
+path = "src/main.rs"
+
+[[bin]]
+name = "backtest-runner"
+path = "src/bin/backtest.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
