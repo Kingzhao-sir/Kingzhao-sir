@@ -1,133 +1,129 @@
-//! Feature extraction for trading signals
-//! 
-//! Extracts features from:
-//! - Polymarket support rate (implied probability)
-//! - 1-minute and 5-minute K-line patterns
-//! - Order book imbalance (OBI)
-//! - Cross-exchange spread (Binance vs Polymarket)
+//! Feature Extraction Engine
+//! Extracts predictive features from market data
 
-use crate::types::{Decimal, SignalFactors, OrderBook};
-use rust_decimal::prelude::*;
+use crate::data::types::{OrderBookSnapshot, Kline1m, Kline5m};
+use crate::strategy::types::SignalFactors;
 
-/// Extracts alpha factors for signal generation
+/// Feature extractor for strategy signals
 pub struct FeatureExtractor {
-    // Ring buffers for efficient sliding window calculations
-    price_history_1m: Vec<f64>,
-    price_history_5m: Vec<f64>,
-    support_rate_history: Vec<f64>,
+    /// Threshold for strong order book imbalance
+    obi_threshold: f64,
+    /// Threshold for significant support rate deviation
+    support_rate_threshold: f64,
 }
 
 impl FeatureExtractor {
     pub fn new() -> Self {
         Self {
-            // Pre-allocate ring buffers (no dynamic allocation in hot path)
-            price_history_1m: Vec::with_capacity(300), // 5 minutes of 1-second data
-            price_history_5m: Vec::with_capacity(300),
-            support_rate_history: Vec::with_capacity(300),
+            obi_threshold: 0.3,      // 30% imbalance
+            support_rate_threshold: 0.05, // 5% deviation from 50%
         }
     }
     
-    /// Calculate momentum factor from K-line data
-    /// Positive = bullish momentum, Negative = bearish
-    pub fn calculate_momentum(&self, prices: &[f64], lookback: usize) -> f64 {
-        if prices.len() < lookback + 1 {
-            return 0.0;
-        }
-        
-        let current = prices[prices.len() - 1];
-        let past = prices[prices.len() - 1 - lookback];
-        
-        if past == 0.0 {
-            return 0.0;
-        }
+    /// Calculate support rate score from Polymarket implied probability
+    /// Score range: -1.0 (strong short) to +1.0 (strong long)
+    #[inline]
+    pub fn calculate_support_rate_score(&self, implied_prob: f64) -> f64 {
+        // If implied prob > 0.5, bullish; < 0.5, bearish
+        let deviation = implied_prob - 0.5;
         
         // Normalize to [-1, 1] range
-        let momentum = (current - past) / past;
-        momentum.clamp(-1.0, 1.0)
+        (deviation / self.support_rate_threshold).clamp(-1.0, 1.0)
     }
     
-    /// Calculate VWAP deviation
-    pub fn calculate_vwap_deviation(&self, prices: &[f64], volumes: &[f64]) -> f64 {
-        if prices.is_empty() || volumes.is_empty() || prices.len() != volumes.len() {
+    /// Calculate 1-minute K-line pattern score
+    /// Analyzes recent momentum and candle patterns
+    #[inline]
+    pub fn calculate_kline_1m_score(&self, klines: &[Kline1m]) -> f64 {
+        if klines.is_empty() {
             return 0.0;
         }
         
-        let mut total_pv = 0.0;
-        let mut total_volume = 0.0;
+        // Simple momentum: compare current close to open
+        let latest = klines.last().unwrap();
+        let price_change = (latest.close - latest.open) / latest.open;
         
-        for (price, volume) in prices.iter().zip(volumes.iter()) {
-            total_pv += price * volume;
-            total_volume += volume;
-        }
-        
-        if total_volume == 0.0 {
+        // Normalize and clamp
+        (price_change * 100.0).clamp(-1.0, 1.0)
+    }
+    
+    /// Calculate 5-minute K-line trend score
+    /// Analyzes longer-term trend direction
+    #[inline]
+    pub fn calculate_kline_5m_score(&self, klines: &[Kline5m]) -> f64 {
+        if klines.len() < 2 {
             return 0.0;
         }
         
-        let vwap = total_pv / total_volume;
-        let current_price = prices[prices.len() - 1];
+        // Compare current 5m candle to previous
+        let current = klines.last().unwrap();
+        let previous = &klines[klines.len() - 2];
         
-        // Normalized deviation
-        (current_price - vwap) / vwap
-    }
-    
-    /// Calculate order book imbalance factor
-    /// Range: [-1, 1] where positive = bid pressure
-    pub fn calculate_obi_factor(&self, obi: f64) -> f64 {
-        // OBI is already in [-1, 1] range
-        obi.clamp(-1.0, 1.0)
-    }
-    
-    /// Calculate support rate factor from Polymarket implied probability
-    /// Support rate > 0.5 suggests "Yes" (price up)
-    pub fn calculate_support_rate_factor(&self, support_rate: f64) -> f64 {
-        // Convert [0, 1] to [-1, 1]
-        // 0.5 -> 0.0 (neutral)
-        // 1.0 -> 1.0 (strong buy)
-        // 0.0 -> -1.0 (strong sell)
-        (support_rate - 0.5) * 2.0
-    }
-    
-    /// Calculate cross-exchange spread factor
-    /// Positive when Binance price > Polymarket (arbitrage opportunity)
-    pub fn calculate_spread_factor(&self, binance_price: f64, polymarket_price: f64) -> f64 {
-        if polymarket_price == 0.0 {
-            return 0.0;
-        }
+        let trend = if current.close > previous.close {
+            1.0
+        } else if current.close < previous.close {
+            -1.0
+        } else {
+            0.0
+        };
         
-        let spread = (binance_price - polymarket_price) / polymarket_price;
-        spread.clamp(-1.0, 1.0)
-    }
-    
-    /// Calculate time decay factor
-    /// Increases urgency as cycle end approaches
-    pub fn calculate_time_decay_factor(&self, seconds_remaining: i64, total_seconds: i64) -> f64 {
-        if total_seconds <= 0 {
-            return 0.0;
-        }
+        // Weight by volume
+        let volume_ratio = if previous.volume > 0.0 {
+            current.volume / previous.volume
+        } else {
+            1.0
+        };
         
-        let ratio = seconds_remaining as f64 / total_seconds as f64;
-        // Higher factor when less time remains
-        (1.0 - ratio).clamp(0.0, 1.0)
+        (trend * volume_ratio.clamp(0.5, 2.0)).clamp(-1.0, 1.0)
     }
     
-    /// Extract all features and return SignalFactors
-    pub fn extract_features(
+    /// Calculate order book imbalance score
+    /// Positive = buy pressure, Negative = sell pressure
+    #[inline]
+    pub fn calculate_orderbook_score(&self, ob: &OrderBookSnapshot) -> f64 {
+        let obi = ob.calculate_obi();
+        (obi / self.obi_threshold).clamp(-1.0, 1.0)
+    }
+    
+    /// Calculate cross-exchange divergence score
+    /// Compares Binance price to Polymarket implied price
+    #[inline]
+    pub fn calculate_cross_exchange_score(
         &self,
-        support_rate: f64,
-        binance_prices: &[f64],
-        binance_volumes: &[f64],
-        obi: f64,
         binance_price: f64,
-        polymarket_price: f64,
-        seconds_remaining: i64,
+        polymarket_implied: f64,
+        fair_value: f64,
+    ) -> f64 {
+        // Convert Polymarket probability to implied BTC price
+        let poly_implied_price = fair_value * polymarket_implied / 0.5;
+        
+        // Calculate divergence
+        let divergence = (binance_price - poly_implied_price) / binance_price;
+        
+        // If Binance > Polymarket, expect Polymarket to catch up (bullish)
+        (divergence * 100.0).clamp(-1.0, 1.0)
+    }
+    
+    /// Generate complete signal factors from all inputs
+    pub fn extract_all_factors(
+        &self,
+        implied_prob: f64,
+        klines_1m: &[Kline1m],
+        klines_5m: &[Kline5m],
+        orderbook: &OrderBookSnapshot,
+        binance_price: f64,
+        fair_value: f64,
     ) -> SignalFactors {
         SignalFactors {
-            support_rate_factor: self.calculate_support_rate_factor(support_rate),
-            momentum_factor: self.calculate_momentum(binance_prices, 5), // 5-period momentum
-            obi_factor: self.calculate_obi_factor(obi),
-            spread_factor: self.calculate_spread_factor(binance_price, polymarket_price),
-            time_decay_factor: self.calculate_time_decay_factor(seconds_remaining, 300), // 5 min = 300s
+            support_rate_score: self.calculate_support_rate_score(implied_prob),
+            kline_1m_score: self.calculate_kline_1m_score(klines_1m),
+            kline_5m_score: self.calculate_kline_5m_score(klines_5m),
+            orderbook_score: self.calculate_orderbook_score(orderbook),
+            cross_exchange_score: self.calculate_cross_exchange_score(
+                binance_price,
+                implied_prob,
+                fair_value,
+            ),
         }
     }
 }
@@ -141,67 +137,96 @@ impl Default for FeatureExtractor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::types::Level;
     
     #[test]
-    fn test_feature_extractor_creation() {
+    fn test_support_rate_score() {
         let extractor = FeatureExtractor::new();
-        assert!(extractor.price_history_1m.capacity() >= 300);
+        
+        // Strong bullish (> 55% support)
+        let score = extractor.calculate_support_rate_score(0.60);
+        assert!(score > 0.5);
+        
+        // Strong bearish (< 45% support)
+        let score = extractor.calculate_support_rate_score(0.40);
+        assert!(score < -0.5);
+        
+        // Neutral (~50%)
+        let score = extractor.calculate_support_rate_score(0.50);
+        assert!(score.abs() < 0.1);
     }
     
     #[test]
-    fn test_momentum_calculation() {
+    fn test_orderbook_score() {
         let extractor = FeatureExtractor::new();
-        let prices = vec![100.0, 101.0, 102.0, 103.0, 104.0];
         
-        let momentum = extractor.calculate_momentum(&prices, 1);
-        assert!(momentum > 0.0); // Upward momentum
+        // Buy-heavy order book
+        let ob_buy = OrderBookSnapshot::new(
+            1000,
+            vec![Level { price: 0.51, size: 300.0, order_count: 10 }],
+            vec![Level { price: 0.53, size: 100.0, order_count: 5 }],
+        );
+        let score = extractor.calculate_orderbook_score(&ob_buy);
+        assert!(score > 0.5);
         
-        let momentum_4 = extractor.calculate_momentum(&prices, 4);
-        assert!(momentum_4 > momentum); // Longer lookback shows more momentum
+        // Sell-heavy order book
+        let ob_sell = OrderBookSnapshot::new(
+            2000,
+            vec![Level { price: 0.49, size: 100.0, order_count: 5 }],
+            vec![Level { price: 0.51, size: 300.0, order_count: 10 }],
+        );
+        let score = extractor.calculate_orderbook_score(&ob_sell);
+        assert!(score < -0.5);
     }
     
     #[test]
-    fn test_support_rate_factor() {
+    fn test_composite_factors() {
         let extractor = FeatureExtractor::new();
         
-        // Neutral support rate
-        assert!((extractor.calculate_support_rate_factor(0.5) - 0.0).abs() < 0.001);
+        let klines_1m = vec![Kline1m {
+            timestamp_ms: 1000,
+            open: 95000.0,
+            high: 95500.0,
+            low: 94800.0,
+            close: 95300.0,
+            volume: 100.0,
+        }];
         
-        // Strong buy signal
-        assert!(extractor.calculate_support_rate_factor(1.0) > 0.9);
+        let klines_5m = vec![
+            Kline5m {
+                timestamp_ms: 1000,
+                open: 94500.0,
+                high: 95500.0,
+                low: 94000.0,
+                close: 95000.0,
+                volume: 500.0,
+            },
+            Kline5m {
+                timestamp_ms: 2000,
+                open: 95000.0,
+                high: 96000.0,
+                low: 94800.0,
+                close: 95800.0,
+                volume: 600.0,
+            },
+        ];
         
-        // Strong sell signal
-        assert!(extractor.calculate_support_rate_factor(0.0) < -0.9);
-    }
-    
-    #[test]
-    fn test_obi_factor() {
-        let extractor = FeatureExtractor::new();
+        let ob = OrderBookSnapshot::new(
+            1000,
+            vec![Level { price: 0.51, size: 200.0, order_count: 8 }],
+            vec![Level { price: 0.53, size: 150.0, order_count: 6 }],
+        );
         
-        // Balanced book
-        assert!((extractor.calculate_obi_factor(0.0) - 0.0).abs() < 0.001);
+        let factors = extractor.extract_all_factors(
+            0.55,  // 55% support rate
+            &klines_1m,
+            &klines_5m,
+            &ob,
+            95000.0,
+            95000.0,
+        );
         
-        // Bid-heavy
-        assert!(extractor.calculate_obi_factor(0.8) > 0.7);
-        
-        // Ask-heavy
-        assert!(extractor.calculate_obi_factor(-0.8) < -0.7);
-    }
-    
-    #[test]
-    fn test_time_decay_factor() {
-        let extractor = FeatureExtractor::new();
-        
-        // Start of cycle (300s remaining)
-        let factor_start = extractor.calculate_time_decay_factor(300, 300);
-        assert!((factor_start - 0.0).abs() < 0.001);
-        
-        // End of cycle (0s remaining)
-        let factor_end = extractor.calculate_time_decay_factor(0, 300);
-        assert!((factor_end - 1.0).abs() < 0.001);
-        
-        // Middle of cycle
-        let factor_mid = extractor.calculate_time_decay_factor(150, 300);
-        assert!((factor_mid - 0.5).abs() < 0.001);
+        let composite = factors.composite_score();
+        assert!(composite > 0.0); // Should be bullish overall
     }
 }

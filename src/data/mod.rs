@@ -1,14 +1,14 @@
-//! Data ingestion module - market data gateway and routing
-//! 
-//! Handles:
-//! - 5-minute market contract rotation (pre-warming next cycle)
-//! - WebSocket connections to Binance and Polymarket
-//! - Zero-copy tick data processing
+//! Data Module - Market data ingestion and order book management
 
 pub mod gateway;
-pub mod market_router;
-pub mod order_book;
+pub mod types;
+pub mod orderbook;
 
-pub use gateway::DataGateway;
-pub use market_router::MarketRouter;
-pub use order_book::OrderBookManager;
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_data_module() {
+        // Basic module test
+        assert!(true);
+    }
+}

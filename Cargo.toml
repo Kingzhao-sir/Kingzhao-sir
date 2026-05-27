@@ -3,62 +3,52 @@ name = "polymarket-hft"
 version = "0.1.0"
 edition = "2021"
 authors = ["HFT Team"]
-description = "Production-grade Polymarket 5-minute BTC prediction trading system"
+description = "Production-grade HFT system for Polymarket 5m BTC prediction"
 
 [dependencies]
-# Async runtime - core of our zero-allocation hot path
+# Async Runtime
 tokio = { version = "1.35", features = ["full"] }
 
-# Web framework for API
-axum = { version = "0.7", features = ["ws"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
-
-# Serialization - rkyv for zero-copy in hot path
+# Serialization (Zero-copy with rkyv)
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-rkyv = { version = "0.7", features = ["alloc"] }
+rkyv = { version = "0.7", features = ["validation"] }
 
-# WebSocket client for market data
-tokio-tungstenite = "0.21"
-
-# HTTP client for REST APIs
+# Networking
 reqwest = { version = "0.11", features = ["json", "stream"] }
+tokio-tungstenite = "0.20"
+hyper = { version = "0.14", features = ["full"] }
 
-# Crypto for EIP-712 signature (Polymarket order signing)
+# Crypto (EIP-712 Signing)
 k256 = { version = "0.13", features = ["ecdsa", "sha256"] }
-sha3 = "0.10"
+ethers-core = "2.0"
+hex = "0.4"
 
-# Time handling with high precision
-chrono = { version = "0.4", features = ["serde"] }
-
-# Logging and tracing - async, zero-copy logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-
-# Lock-free channels for MPMC communication
+# Data Structures & Concurrency
 crossbeam = "0.8"
-crossbeam-channel = "0.5"
-
-# High-performance concurrency primitives
+dashmap = "5.5"
+ringbuffer = "0.15"
 parking_lot = "0.12"
 
-# Decimal arithmetic for precise financial calculations
-rust_decimal = "1.34"
+# Math & Stats
+ndarray = "0.15"
+statrs = "0.16"
 
-# Fast hash map with predictable performance
-indexmap = "2.1"
+# Logging & Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# Error handling
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error Handling
 thiserror = "1.0"
 anyhow = "1.0"
 
-# Configuration management
-config = "0.14"
-
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
-tokio-test = "0.4"
+criterion = "0.5"
+mockall = "0.12"
+rand = "0.8"
 
 [[bin]]
 name = "trading-engine"
@@ -66,7 +56,7 @@ path = "src/main.rs"
 
 [[bin]]
 name = "backtest-runner"
-path = "src/backtest/main.rs"
+path = "src/bin/backtest.rs"
 
 [profile.release]
 opt-level = 3
@@ -74,7 +64,3 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
-
-[profile.bench]
-opt-level = 3
-lto = true
