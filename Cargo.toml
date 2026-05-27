@@ -1,85 +1,72 @@
 [package]
-name = "poly_hft"
+name = "polymarket-hft"
 version = "0.1.0"
 edition = "2021"
 authors = ["HFT Team"]
 description = "Production-grade Polymarket 5-minute BTC prediction trading system"
 
 [dependencies]
-# Async runtime
+# Async runtime - core of our zero-allocation hot path
 tokio = { version = "1.35", features = ["full"] }
 
-# Web framework
-axum = "0.7"
+# Web framework for API
+axum = { version = "0.7", features = ["ws"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
-# Serialization
+# Serialization - rkyv for zero-copy in hot path
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-rkyv = { version = "0.7", features = ["validation"] }
+rkyv = { version = "0.7", features = ["alloc"] }
 
-# WebSocket
+# WebSocket client for market data
 tokio-tungstenite = "0.21"
-warp = "0.3"
 
-# HTTP client
-reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+# HTTP client for REST APIs
+reqwest = { version = "0.11", features = ["json", "stream"] }
 
-# Cryptography for EIP-712
+# Crypto for EIP-712 signature (Polymarket order signing)
 k256 = { version = "0.13", features = ["ecdsa", "sha256"] }
-ethers-core = "2.0"
+sha3 = "0.10"
 
-# Time handling
+# Time handling with high precision
 chrono = { version = "0.4", features = ["serde"] }
-time = "0.3"
 
-# Logging and tracing
+# Logging and tracing - async, zero-copy logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tracing-appender = "0.2"
 
-# Metrics
-metrics = "0.22"
-metrics-exporter-prometheus = "0.13"
-
-# Lock-free data structures
+# Lock-free channels for MPMC communication
 crossbeam = "0.8"
 crossbeam-channel = "0.5"
+
+# High-performance concurrency primitives
 parking_lot = "0.12"
 
-# Memory optimization
-bumpalo = "3.14"
+# Decimal arithmetic for precise financial calculations
+rust_decimal = "1.34"
 
-# JSON parsing with SIMD
-simd-json = "0.13"
+# Fast hash map with predictable performance
+indexmap = "2.1"
 
 # Error handling
 thiserror = "1.0"
 anyhow = "1.0"
 
-# Configuration
+# Configuration management
 config = "0.14"
-
-# UUID for order IDs
-uuid = { version = "1.6", features = ["v4", "serde"] }
-
-# Order book data structures
-rust_decimal = "1.33"
-indexmap = "2.1"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 tokio-test = "0.4"
-mockall = "0.12"
 
 [[bin]]
-name = "poly_hft_engine"
+name = "trading-engine"
 path = "src/main.rs"
 
 [[bin]]
-name = "backtest_runner"
-path = "src/bin/backtest.rs"
+name = "backtest-runner"
+path = "src/backtest/main.rs"
 
 [profile.release]
 opt-level = 3
