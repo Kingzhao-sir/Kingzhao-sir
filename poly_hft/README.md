@@ -1,79 +1,132 @@
 # Polymarket 5 分钟 BTC 涨跌预测交易系统
 
+高性能、低占用的自动交易系统，专为 Polymarket 5 分钟 BTC 涨跌预测市场设计。
+
+## 核心特性
+
+- **收盘前 30 秒决策**: 在市场收盘前 30 秒触发决策逻辑，最后 5 秒禁止开仓
+- **多源数据融合**: 整合支持率、Binance 实时价格、1 分钟/5 分钟 K 线、订单簿
+- **动态市场轮换**: 自动检测并切换到下一个 5 分钟周期市场
+- **高性能低占用**: Python 实现，内存占用 < 200MB
+
 ## 系统架构
 
-### 核心设计原则
-- **收盘前 30 秒决策**: 在每个 5 分钟周期结束前 30 秒给出买卖判断
-- **最后 5 秒禁止开仓**: 避免结算期间的不确定性
-- **多源数据融合**: 支持率 + 实时价格 + 1 分钟/5 分钟 K 线 + 订单簿
-
-### 技术栈
-- **核心引擎**: Python 3.12 + asyncio (高性能异步 IO)
-- **数据处理**: numpy + pandas (向量化计算)
-- **Web 后端**: FastAPI (异步 API)
-- **前端**: Next.js + Lightweight Charts
-- **数据库**: SQLite (回测) + Redis (实时缓存)
-
-## 目录结构
-
 ```
-poly_hft/
-├── core/                  # 核心引擎
-│   ├── __init__.py
-│   ├── market_router.py   # 动态市场路由
-│   ├── data_gateway.py    # 数据摄取网关
-│   ├── order_book.py      # 订单簿管理
-│   └── signal_engine.py   # 信号计算引擎
-├── engine/                # 交易执行
-│   ├── __init__.py
-│   ├── risk_manager.py    # 风控引擎
-│   ├── execution.py       # 订单执行
-│   └── portfolio.py       # 持仓管理
-├── backtest/              # 回测系统
-│   ├── __init__.py
-│   ├── data_loader.py     # 历史数据加载
-│   ├── simulator.py       # 回测模拟器
-│   └── analyzer.py        # 绩效分析
-├── api/                   # Web API
-│   ├── __init__.py
-│   ├── main.py            # FastAPI 应用
-│   └── routes.py          # API 路由
-├── web/                   # 前端界面
-│   ├── page.tsx
-│   └── components/
-├── config/                # 配置文件
-│   └── settings.py
-├── tests/                 # 测试用例
-│   ├── test_market_router.py
-│   ├── test_order_book.py
-│   └── test_signal_engine.py
-├── requirements.txt
-└── README.md
+┌─────────────────────────────────────────────────────────────┐
+│                      Web 监控界面                            │
+│                  (Next.js + Lightweight Charts)              │
+└─────────────────────────┬───────────────────────────────────┘
+                          │ REST/WebSocket
+┌─────────────────────────▼───────────────────────────────────┐
+│                    Go Web API                                │
+│                 (状态查询/配置管理)                           │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+┌─────────────────────────▼───────────────────────────────────┐
+│                   核心交易引擎 (Python)                       │
+│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────┐    │
+│  │ MarketRouter│  │ DataGateway  │  │ SignalEngine    │    │
+│  │ 市场路由器   │  │ 数据摄取网关  │  │ 信号计算引擎     │    │
+│  └──────┬──────┘  └──────┬───────┘  └────────┬────────┘    │
+│         │                │                    │             │
+│  ┌──────▼────────────────▼────────────────────▼─────────┐  │
+│  │                  执行引擎 (OMS)                        │  │
+│  └──────────────────────────┬───────────────────────────┘  │
+└─────────────────────────────┼───────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+┌───────▼───────┐   ┌────────▼────────┐   ┌───────▼───────┐
+│ Polymarket WS │   │ Binance WS      │   │ Gamma API     │
+│ 支持率/订单簿   │   │ 价格/Tick/K 线   │   │ 市场元数据     │
+└───────────────┘   └─────────────────┘   └───────────────┘
 ```
+
+## 模块说明
+
+### 1. MarketRouter (市场路由器)
+- 监控当前市场周期剩余时间
+- 提前 60 秒预热下一个市场的 Token ID
+- 状态管理：PREHEAT → ACTIVE → DECISION → COOLDOWN → SETTLEMENT
+- 收盘前 30 秒触发决策，最后 5 秒禁止开仓
+
+### 2. DataGateway (数据摄取网关)
+- 连接 Binance WebSocket 获取 BTC/USDT 实时价格和订单簿
+- 连接 Polymarket WebSocket 获取支持率 (隐含概率)
+- 实时计算 1 分钟/5 分钟 K 线
+- 统一数据格式，通过回调分发给订阅者
+
+### 3. SignalEngine (信号计算引擎)
+- 整合多源数据计算特征指标
+  - 支持率及变化趋势
+  - 订单簿失衡 (OBI)
+  - 1 分钟/5 分钟动量
+  - 跨市场价差
+- 基于加权评分生成交易信号 (BUY/SELL/HOLD)
+- 置信度评估
+
+## 快速开始
+
+### 运行测试
+
+```bash
+# 测试 MarketRouter
+python tests/test_market_router.py
+
+# 测试 DataGateway
+python core/data_gateway.py
+
+# 测试 SignalEngine
+python tests/test_signal_engine.py
+```
+
+### 运行完整系统
+
+```bash
+python main.py
+```
+
+## 配置参数
+
+在 `config/settings.py` 中调整:
+
+```python
+# 决策窗口配置
+DECISION_WINDOW_START = 30  # 收盘前 30 秒开始决策
+NO_TRADE_WINDOW = 5         # 收盘前 5 秒禁止开仓
+PREHEAT_SECONDS = 60        # 提前 60 秒预热
+
+# 策略权重
+SUPPORT_RATE_WEIGHT = 0.3
+MOMENTUM_1M_WEIGHT = 0.15
+MOMENTUM_5M_WEIGHT = 0.15
+ORDERBOOK_WEIGHT = 0.2
+```
+
+## 性能指标
+
+- 内存占用：< 200MB
+- 信号计算延迟：< 10ms
+- 数据更新频率：Tick 级 (实时)
 
 ## 开发路线图
 
-### Phase 1: 数据与基建
-- [x] 项目结构设计
-- [ ] 实现 Market Router
-- [ ] 实现 Data Gateway
-- [ ] 实现 Order Book
-- [ ] 单元测试
+- [x] Phase 1: 市场路由器 (MarketRouter)
+- [x] Phase 2: 数据摄取网关 (DataGateway)
+- [x] Phase 3: 信号计算引擎 (SignalEngine)
+- [ ] Phase 4: 执行引擎 (OMS) + Polymarket CLOB 集成
+- [ ] Phase 5: 回测系统
+- [ ] Phase 6: Web 监控界面
 
-### Phase 2: 信号与执行
-- [ ] 实现 Signal Engine
-- [ ] 实现 Risk Manager
-- [ ] 实现 Execution Engine
-- [ ] 集成测试
+## 注意事项
 
-### Phase 3: 回测系统
-- [ ] 实现数据加载器
-- [ ] 实现回测模拟器
-- [ ] 实现绩效分析
-- [ ] 策略优化
+⚠️ **本系统目前使用模拟数据进行测试**。在生产环境使用前，需要:
 
-### Phase 4: Web 界面
-- [ ] FastAPI 后端
-- [ ] Next.js 前端
-- [ ] 实时监控面板
-- [ ] 部署测试
+1. 接入真实的 Polymarket API (Gamma API + CLOB)
+2. 实现 EIP-712 签名逻辑
+3. 添加严格的风控措施
+4. 进行充分的模拟盘测试
+
+## License
+
+MIT
