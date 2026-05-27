@@ -1,5 +1,5 @@
-```gitignore
-# Compiled Python files
+```
+# Python compiled files
 *.pyc
 __pycache__/
 
@@ -8,18 +8,11 @@ __pycache__/
 venv/
 node_modules/
 
-# Testing
-.pytest_cache/
-.coverage
-coverage/
-htmlcov/
-
 # Logs and temp files
 *.log
 *.tmp
-*.swp
 
-# Environment
+# Environment files
 .env
 .env.local
 *.env.*
@@ -28,10 +21,11 @@ htmlcov/
 .vscode/
 .idea/
 
-# Build artifacts
-dist/
-build/
-target/
-.mypy_cache/
-.gradle/
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Pytest cache
+.pytest_cache/
 ```
